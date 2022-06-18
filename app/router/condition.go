@@ -143,10 +143,21 @@ func (m *MultiGeoIPMatcher) Apply(ctx routing.Context) bool {
 		ips = ctx.GetTargetIPs()
 	}
 	for _, ip := range ips {
+		result := false
 		for _, matcher := range m.matchers {
 			if matcher.Match(ip) {
-				return true
+				result = true
+				if !matcher.IsReverseMatch() {
+					break
+				}
+			} else if matcher.IsReverseMatch() {
+				result = false
+				break
 			}
+		}
+
+		if result {
+			return true
 		}
 	}
 	return false
