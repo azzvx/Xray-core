@@ -416,17 +416,35 @@ func parseDomainRule(domain string) ([]*router.Domain, error) {
 	return []*router.Domain{domainRule}, nil
 }
 
+func appendCidrsToList(list *[]*router.GeoIP, cidrs *[]*router.CIDR, isReverseMatch bool) {
+	if len(*cidrs) > 0 {
+		(*list) = append(*list, &router.GeoIP{
+			Cidr:         *cidrs,
+			ReverseMatch: isReverseMatch,
+		})
+		(*cidrs) = []*router.CIDR{}
+	}
+}
+
 func ToCidrList(ips StringList) ([]*router.GeoIP, error) {
 	var geoipList []*router.GeoIP
 	var customCidrs []*router.CIDR
 
+	lastIpReverseMatch := false
 	for _, ip := range ips {
+		isReverseMatch := false
+		if strings.HasPrefix(ip, "!") {
+			isReverseMatch = true
+			ip = ip[1:]
+		}
+
 		if strings.HasPrefix(ip, "geoip:") {
+			appendCidrsToList(&geoipList, &customCidrs, lastIpReverseMatch)
+
 			country := ip[6:]
-			isReverseMatch := false
 			if strings.HasPrefix(ip, "geoip:!") {
 				country = ip[7:]
-				isReverseMatch = true
+				isReverseMatch = !isReverseMatch
 			}
 			if len(country) == 0 {
 				return nil, newError("empty country name in rule")
@@ -455,6 +473,8 @@ func ToCidrList(ips StringList) ([]*router.GeoIP, error) {
 			}
 		}
 		if isExtDatFile != 0 {
+			appendCidrsToList(&geoipList, &customCidrs, lastIpReverseMatch)
+
 			kv := strings.Split(ip[isExtDatFile:], ":")
 			if len(kv) != 2 {
 				return nil, newError("invalid external resource: ", ip)
@@ -466,10 +486,9 @@ func ToCidrList(ips StringList) ([]*router.GeoIP, error) {
 				return nil, newError("empty filename or empty country in rule")
 			}
 
-			isReverseMatch := false
 			if strings.HasPrefix(country, "!") {
 				country = country[1:]
-				isReverseMatch = true
+				isReverseMatch = !isReverseMatch
 			}
 			geoip, err := loadIP(filename, strings.ToUpper(country))
 			if err != nil {
@@ -485,19 +504,19 @@ func ToCidrList(ips StringList) ([]*router.GeoIP, error) {
 			continue
 		}
 
+		// last ip reverse match state changed, appends customCidrs to geoipList
+		if lastIpReverseMatch != isReverseMatch {
+			appendCidrsToList(&geoipList, &customCidrs, lastIpReverseMatch)
+		}
+		lastIpReverseMatch = isReverseMatch
+
 		ipRule, err := ParseIP(ip)
 		if err != nil {
 			return nil, newError("invalid IP: ", ip).Base(err)
 		}
 		customCidrs = append(customCidrs, ipRule)
 	}
-
-	if len(customCidrs) > 0 {
-		geoipList = append(geoipList, &router.GeoIP{
-			Cidr: customCidrs,
-		})
-	}
-
+	appendCidrsToList(&geoipList, &customCidrs, lastIpReverseMatch)
 	return geoipList, nil
 }
 
