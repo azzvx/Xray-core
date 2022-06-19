@@ -205,11 +205,21 @@ func (c *Client) MatchExpectedIPs(domain string, ips []net.IP) ([]net.IP, error)
 	}
 	newIps := []net.IP{}
 	for _, ip := range ips {
+		result := false
 		for _, matcher := range c.expectIPs {
 			if matcher.Match(ip) {
-				newIps = append(newIps, ip)
+				result = true
+				if !matcher.IsReverseMatch() {
+					break
+				}
+			} else if matcher.IsReverseMatch() {
+				result = false
 				break
 			}
+		}
+
+		if result {
+			newIps = append(newIps, ip)
 		}
 	}
 	if len(newIps) == 0 {

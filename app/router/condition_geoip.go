@@ -85,6 +85,10 @@ func (m *GeoIPMatcher) SetReverseMatch(isReverseMatch bool) {
 	m.reverseMatch = isReverseMatch
 }
 
+func (m *GeoIPMatcher) IsReverseMatch() bool {
+	return m.reverseMatch
+}
+
 func (m *GeoIPMatcher) match4(ip uint32) bool {
 	if len(m.ip4) == 0 {
 		return false
